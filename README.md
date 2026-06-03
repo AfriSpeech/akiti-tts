@@ -6,7 +6,7 @@ supports **Asante Twi**, with more languages planned. It is fine-tuned from
 as a small quantized GGUF model, so it runs without a GPU.
 
 - 🧠 Model: [afrispeech/Akiti-TTS](https://huggingface.co/afrispeech/Akiti-TTS)
-- 🌐 Web demo: [michsethowusu/Akiti-TTS Space](https://huggingface.co/spaces/michsethowusu/Akiti-TTS)
+- 🌐 Web demo: [afrispeech/Akiti-TTS Space](https://huggingface.co/spaces/afrispeech/Akiti-TTS)
 
 The model weights download automatically from HuggingFace on first run and are
 cached locally afterward.
@@ -172,4 +172,7 @@ export AKITI_NO_STATS=1
 
 ## License
 
-CC BY-NC 4.0. Fine-tuned from VieNeu-TTS — please credit the upstream authors.
+- **Code** in this repository: [MIT](LICENSE).
+- **Model weights** (`afrispeech/Akiti-TTS`): Apache 2.0, matching the upstream
+  [VieNeu-TTS](https://huggingface.co/pnnbao-ump/VieNeu-TTS-0.3B) it is
+  fine-tuned from. Please credit the upstream authors.
