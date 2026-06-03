@@ -46,7 +46,7 @@ import platform
 import re
 import time
 
-MODEL_REPO     = "michsethowusu/Akiti-TTS"
+MODEL_REPO     = "afrispeech/Akiti-TTS"
 CODEC_REPO     = "neuphonic/neucodec-onnx-decoder-int8"
 GGUF_FILES     = {"q4": "VieNeu-TTS-Twi-Q4_K_M.gguf", "q8": "VieNeu-TTS-Twi-Q8_0.gguf"}
 SAMPLE_RATE    = 24000
@@ -114,6 +114,78 @@ def send_stats(stats: dict) -> None:
             pass  # telemetry must never affect the user
 
     threading.Thread(target=_post, daemon=True).start()
+
+
+# ---------------------------------------------------------------------------
+# Chunked synthesis helpers (shared by the web + REST API servers)
+# ---------------------------------------------------------------------------
+# Long text is split into chunks no larger than MAX_CHUNK_CHARS, on sentence
+# boundaries, and synthesized one chunk at a time. This keeps each generation
+# bounded and lets the servers report progress. GAP_SECONDS of silence is
+# inserted between stitched chunks so the joins don't sound abrupt.
+MAX_CHUNK_CHARS = 200
+GAP_SECONDS = 0.2
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _split_long_sentence(sentence: str, max_chars: int) -> list[str]:
+    """Break a single over-long sentence into word-aligned pieces."""
+    pieces: list[str] = []
+    cur = ""
+    for word in sentence.split():
+        if cur and len(cur) + 1 + len(word) > max_chars:
+            pieces.append(cur)
+            cur = word
+        else:
+            cur = f"{cur} {word}".strip()
+    if cur:
+        pieces.append(cur)
+    return pieces
+
+
+def chunk_text(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
+    """Group whole sentences into chunks no longer than `max_chars`.
+
+    Short text returns a single chunk. A sentence longer than the limit is
+    split on word boundaries so no chunk ever exceeds it.
+    """
+    text = text.strip()
+    if len(text) <= max_chars:
+        return [text] if text else []
+    sentences = [s.strip() for s in _SENT_SPLIT.split(text) if s.strip()] or [text]
+    chunks: list[str] = []
+    cur = ""
+    for sent in sentences:
+        if len(sent) > max_chars:
+            if cur:
+                chunks.append(cur)
+                cur = ""
+            chunks.extend(_split_long_sentence(sent, max_chars))
+            continue
+        if cur and len(cur) + 1 + len(sent) > max_chars:
+            chunks.append(cur)
+            cur = sent
+        else:
+            cur = f"{cur} {sent}".strip()
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+def stitch_wavs(wavs: list, gap_seconds: float = GAP_SECONDS):
+    """Concatenate per-chunk waveforms with a short silence between each."""
+    import numpy as np
+    if not wavs:
+        raise ValueError("No audio to stitch.")
+    if len(wavs) == 1:
+        return wavs[0]
+    gap = np.zeros(int(SAMPLE_RATE * gap_seconds), dtype=wavs[0].dtype)
+    joined: list = []
+    for i, w in enumerate(wavs):
+        if i:
+            joined.append(gap)
+        joined.append(w)
+    return np.concatenate(joined)
 
 
 # ---------------------------------------------------------------------------
