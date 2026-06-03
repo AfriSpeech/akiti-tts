@@ -6,3 +6,4 @@ phonemizer>=3.2.2
 numpy
 soundfile
 huggingface_hub>=0.23.0
+flask>=3.0

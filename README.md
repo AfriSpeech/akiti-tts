@@ -47,6 +47,30 @@ python akiti_local.py --text "Akwaaba! Wo ho te sɛn?" --voice kofi --output out
 python akiti_local.py --text "Meda wo ase." --model q8 --output out.wav
 ```
 
+### Studio (web app)
+
+For creating voice content, run the browser-based **Akiti TTS Studio**:
+
+```bash
+python akiti_web.py
+```
+
+It starts a small local server and opens `http://127.0.0.1:7860` in your
+browser. The model loads once and stays warm, so each generation is fast. From
+there you can:
+
+- write or paste a script and **Generate** (or press **Ctrl/⌘ + Enter**),
+- play clips inline and **Download** them as WAV,
+- build up a session **library** of generated clips,
+- tune the model (q4/q8), temperature, and repetition penalty.
+
+Options: `--model q8`, `--port 8000`, `--host 0.0.0.0`, `--no-browser`.
+Everything runs locally — nothing is uploaded.
+
+> Voice selection is **temporarily disabled** while voice cloning is being
+> improved, so generation uses the default speaker. (The CLI still exposes
+> `--voice` / `--list-voices` for testing.)
+
 ### Options
 
 | Flag | Default | Description |
@@ -59,24 +83,46 @@ python akiti_local.py --text "Meda wo ase." --model q8 --output out.wav
 | `--top-p` | `0.8` | Nucleus sampling |
 | `--rep-penalty` | `1.3` | Higher reduces silences/repeats |
 | `--threads` | all cores | CPU threads to use |
-| `--no-stats` | — | Don't send anonymous stats this run |
-| `--reset-stats` | — | Re-ask the stats consent question |
+| `--no-stats` | — | Opt out of anonymous performance stats for this run |
 
-## Anonymous usage stats (opt-in)
+## Anonymous usage stats
 
-On the **first run** you'll be asked whether to share anonymous performance
-metrics. If you agree, after each generation the script sends:
+To understand how Akiti TTS performs on real-world hardware, **each generation
+sends a small, anonymous performance report** (from both the CLI and the GUI):
 
 - your CPU model name, architecture, OS, Python version
-- thread count, model variant (q4/q8)
+- thread count and model variant (q4/q8)
 - generation speed: audio length, generation time, real-time factor
 
-**Never sent:** your input text, the generated audio, or any personal data.
+**Never sent:** your input text, the generated audio, IP-linked identity, or any
+personal data. The report describes *how fast the model ran*, never *what you
+typed*.
 
-This builds a public benchmark of how fast Akiti TTS runs across different CPUs.
-You can decline (the default), opt out per run with `--no-stats`, or change your
-mind with `--reset-stats`. Your choice is stored in
-`~/.config/akiti-tts/config.json`.
+### Why this helps
+
+Akiti TTS runs on CPUs of every shape and size, and we can't test them all. These
+anonymous reports let us build a public benchmark of real-time-factor across
+different processors so we can:
+
+- tune sensible defaults (thread counts, q4 vs q8) for common hardware,
+- set realistic speed expectations in the docs, and
+- prioritize optimization work where it actually matters.
+
+The data is aggregate and anonymous — it directly improves the tool for everyone
+running it.
+
+### Opting out
+
+Stats are sent by default. To opt out:
+
+- **CLI, single run:** pass `--no-stats`.
+- **Everywhere (CLI *and* GUI):** set the environment variable `AKITI_NO_STATS=1`.
+
+```bash
+python akiti_local.py --text "Meda wo ase." --no-stats
+# or disable it everywhere, including the GUI:
+export AKITI_NO_STATS=1
+```
 
 ## License
 

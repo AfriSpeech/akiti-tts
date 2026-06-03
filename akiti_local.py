@@ -30,19 +30,20 @@ Usage
     python akiti_local.py --text "Akwaaba!" --voice kofi --output out.wav
     python akiti_local.py --text "Meda wo ase." --model q8 --output out.wav
 
-Anonymous usage stats (opt-in): on first run you'll be asked whether to share
-anonymous performance metrics (CPU type, generation speed — never your text or
-audio). Use --no-stats to skip for a run, or --reset-stats to be asked again.
+Anonymous usage stats: each run sends anonymous performance metrics (CPU model,
+generation speed — never your text or audio) to help build a public benchmark of
+how fast the model runs on different CPUs. Opt out with --no-stats, or by setting
+the environment variable AKITI_NO_STATS=1.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import multiprocessing
 import os
 import platform
 import re
-import sys
 import time
 
 MODEL_REPO     = "michsethowusu/Akiti-TTS"
@@ -52,8 +53,25 @@ SAMPLE_RATE    = 24000
 MAX_REF_CODES  = 200
 SCRIPT_VERSION = "1.0.0"
 STATS_URL      = "https://ghana-nlp--akiti-tts-submit-stats.modal.run"
-CONFIG_PATH    = os.path.join(os.path.expanduser("~"), ".config", "akiti-tts", "config.json")
 HERE           = os.path.dirname(os.path.abspath(__file__))
+
+
+@contextlib.contextmanager
+def _suppress_stderr():
+    """Silence C-level stderr (e.g. llama.cpp's n_ctx notice) at the fd level.
+
+    verbose=False doesn't catch messages emitted directly to fd 2 by the
+    underlying C library, so we redirect the fd to /dev/null for the block.
+    """
+    saved_fd = os.dup(2)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(saved_fd, 2)
+        os.close(devnull)
+        os.close(saved_fd)
 
 
 # ---------------------------------------------------------------------------
@@ -74,48 +92,15 @@ def _cpu_name() -> str:
     return s or platform.machine() or "unknown"
 
 
-def _load_config() -> dict:
-    try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-def _save_config(cfg: dict) -> None:
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
-
-
-def telemetry_enabled(reset: bool = False) -> bool:
-    """Return whether to send stats, prompting once on first run."""
-    cfg = _load_config()
-    if reset:
-        cfg.pop("telemetry", None)
-    if "telemetry" in cfg:
-        return bool(cfg["telemetry"])
-
-    # First run — ask, but only if interactive; otherwise default off.
-    if not sys.stdin.isatty():
-        cfg["telemetry"] = False
-        _save_config(cfg)
-        return False
-
-    print("\n" + "-" * 70)
-    print("Help improve Akiti-TTS?")
-    print("Share ANONYMOUS performance stats — your CPU model and generation")
-    print("speed. Your text and audio are NEVER sent. This helps build a table")
-    print("of how fast the model runs on different CPUs.")
-    ans = input("Share anonymous stats? [y/N]: ").strip().lower()
-    print("-" * 70 + "\n")
-    cfg["telemetry"] = ans in ("y", "yes")
-    _save_config(cfg)
-    return cfg["telemetry"]
-
-
 def send_stats(stats: dict) -> None:
-    """Best-effort POST; never raises, runs in a background thread."""
+    """Best-effort POST of anonymous metrics; never raises, runs in a thread.
+
+    Auto-sent by default. Set AKITI_NO_STATS=1 (or pass --no-stats on the CLI)
+    to opt out — see the README's "Anonymous usage stats" section for what is
+    and isn't sent, and why it helps.
+    """
+    if os.environ.get("AKITI_NO_STATS"):
+        return
     import threading
 
     def _post():
@@ -137,11 +122,16 @@ def send_stats(stats: dict) -> None:
 class AkitiTTS:
     def __init__(self, model: str = "q4", n_threads: int | None = None):
         import numpy as np
-        import onnxruntime
+        # onnxruntime probes for GPUs at import and warns on CPU-only boxes;
+        # silence that fd-level chatter during the import itself.
+        with _suppress_stderr():
+            import onnxruntime
         from huggingface_hub import hf_hub_download
         from transformers import AutoTokenizer
         from llama_cpp import Llama
         from phonemizer import phonemize as _ph
+
+        onnxruntime.set_default_logger_severity(3)  # 3 = error (hide warnings)
 
         t0 = time.time()
         self.np, self.re, self._ph = np, re, _ph
@@ -168,8 +158,9 @@ class AkitiTTS:
         print(f"Loading GGUF weights ({gguf_file}) — first run downloads the model ...", flush=True)
         gguf_path = hf_hub_download(repo_id=MODEL_REPO, filename=gguf_file)
         self.threads = n_threads or max(multiprocessing.cpu_count(), 1)
-        self.llm = Llama(model_path=gguf_path, n_ctx=2048, n_gpu_layers=0,
-                         n_threads=self.threads, n_threads_batch=self.threads, verbose=False)
+        with _suppress_stderr():
+            self.llm = Llama(model_path=gguf_path, n_ctx=2048, n_gpu_layers=0,
+                             n_threads=self.threads, n_threads_batch=self.threads, verbose=False)
         self.load_seconds = round(time.time() - t0, 2)
         print(f"Ready in {self.load_seconds}s. (CPU threads: {self.threads})", flush=True)
 
@@ -239,8 +230,8 @@ def main():
     p.add_argument("--rep-penalty", type=float, default=1.3, help="Higher reduces silences/repeats")
     p.add_argument("--threads", type=int, default=None, help="CPU threads (default: all cores)")
     p.add_argument("--list-voices", action="store_true", help="List available voices and exit")
-    p.add_argument("--no-stats", action="store_true", help="Don't send anonymous stats this run")
-    p.add_argument("--reset-stats", action="store_true", help="Re-ask the stats consent question")
+    p.add_argument("--no-stats", action="store_true",
+                   help="Opt out of anonymous performance stats for this run")
     args = p.parse_args()
 
     if args.list_voices:
@@ -269,8 +260,9 @@ def main():
     print(f"Saved {audio_seconds}s -> {os.path.abspath(args.output)}  "
           f"(gen {gen_seconds}s, RTF {rtf}x)")
 
-    # Opt-in anonymous telemetry
-    if not args.no_stats and telemetry_enabled(reset=args.reset_stats):
+    # Anonymous performance telemetry — auto-sent; opt out with --no-stats
+    # or AKITI_NO_STATS=1 (handled inside send_stats).
+    if not args.no_stats:
         send_stats({
             "cpu": _cpu_name(),
             "arch": platform.machine(),
