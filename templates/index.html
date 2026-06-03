@@ -3,16 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Akiti TTS Studio — Asante Twi</title>
+  <title>Akiti TTS Studio</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">🪘</span>
       <div>
         <h1>Akiti TTS Studio</h1>
-        <p class="tagline">Create Asante Twi voice content — locally on your CPU</p>
+        <p class="tagline">Create voice content — locally on your CPU</p>
       </div>
     </div>
     <div id="status" class="status loading">
@@ -24,7 +23,7 @@
     <!-- Editor -->
     <section class="editor card">
       <label class="field-label" for="text">Your script</label>
-      <textarea id="text" placeholder="Type or paste Twi text to turn into speech…"
+      <textarea id="text" placeholder="Type or paste your text to turn into speech…"
                 spellcheck="false">Ghanafoɔ amanneɛbɔ a ɛfa nneɛma a ɛrekɔ so wɔ yɛn man yi mu. ɛnnɛ yɛka adwuma a ɛrekɔ so wɔ bɔɔlobɔ akansie mu.</textarea>
       <div class="editor-foot">
         <span id="charcount" class="muted">0 characters</span>
@@ -42,8 +41,8 @@
       <div class="setting">
         <label for="model">Model</label>
         <select id="model">
-          <option value="q4" {{ 'selected' if default_model == 'q4' else '' }}>q4 — faster</option>
           <option value="q8" {{ 'selected' if default_model == 'q8' else '' }}>q8 — better quality</option>
+          <option value="q4" {{ 'selected' if default_model == 'q4' else '' }}>q4 — faster</option>
         </select>
         <small class="muted">Switching reloads the model (a few seconds).</small>
       </div>

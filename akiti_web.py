@@ -2,17 +2,17 @@
 """
 Akiti-TTS Studio — local web app.
 
-Spins up a small Flask server and opens a browser UI for creating Asante Twi
-voice content. It wraps the same AkitiTTS engine used by akiti_local.py: the
-model loads once on startup and stays warm, so each generation is just the
-synthesis time.
+Spins up a small Flask server and opens a browser UI for creating voice content.
+Akiti TTS currently supports Asante Twi, with more languages planned. It wraps
+the same AkitiTTS engine used by akiti_local.py: the model loads once on startup
+and stays warm, so each generation is just the synthesis time.
 
 Everything runs locally on your machine — no audio or text leaves your computer
 (aside from the opt-in anonymous performance stats described in the README).
 
 Run:
-    python akiti_web.py                  # loads q4, opens http://127.0.0.1:7860
-    python akiti_web.py --model q8        # higher quality
+    python akiti_web.py                  # loads q8, opens http://127.0.0.1:7860
+    python akiti_web.py --model q4        # faster, lower quality
     python akiti_web.py --port 8000 --no-browser
 
 Opt out of anonymous stats with the AKITI_NO_STATS=1 environment variable.
@@ -91,7 +91,7 @@ def synthesize():
     data = request.get_json(silent=True) or {}
     text = (data.get("text") or "").strip()
     if not text:
-        return jsonify(error="Please enter some Twi text."), 400
+        return jsonify(error="Please enter some text."), 400
 
     model = data.get("model") or app.config["DEFAULT_MODEL"]
     if model not in ("q4", "q8"):
@@ -145,8 +145,8 @@ def synthesize():
 
 def main():
     p = argparse.ArgumentParser(description="Akiti-TTS Studio web app.")
-    p.add_argument("--model", default="q4", choices=["q4", "q8"],
-                   help="q4 = faster, q8 = better quality (default: q4)")
+    p.add_argument("--model", default="q8", choices=["q4", "q8"],
+                   help="q8 = better quality, q4 = faster (default: q8)")
     p.add_argument("--host", default="127.0.0.1", help="Bind host")
     p.add_argument("--port", type=int, default=7860, help="Bind port")
     p.add_argument("--no-browser", action="store_true",

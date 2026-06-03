@@ -1,14 +1,15 @@
-# 🪘 Akiti TTS
+# Akiti TTS
 
-Asante Twi text-to-speech you can run **locally on your own CPU**. Akiti TTS is
-fine-tuned from [VieNeu-TTS-0.3B](https://huggingface.co/pnnbao-ump/VieNeu-TTS-0.3B)
-and served as a small quantized GGUF model, so it runs without a GPU.
+Text-to-speech you can run **locally on your own CPU**. Akiti TTS currently
+supports **Asante Twi**, with more languages planned. It is fine-tuned from
+[VieNeu-TTS-0.3B](https://huggingface.co/pnnbao-ump/VieNeu-TTS-0.3B) and served
+as a small quantized GGUF model, so it runs without a GPU.
 
-- 🧠 Model & voices: [michsethowusu/Akiti-TTS](https://huggingface.co/michsethowusu/Akiti-TTS)
+- 🧠 Model: [michsethowusu/Akiti-TTS](https://huggingface.co/michsethowusu/Akiti-TTS)
 - 🌐 Web demo: [michsethowusu/Akiti-TTS Space](https://huggingface.co/spaces/michsethowusu/Akiti-TTS)
 
 The model weights download automatically from HuggingFace on first run and are
-cached locally afterward. The voice presets (`voices.json`) ship with this repo.
+cached locally afterward.
 
 ## Install
 
@@ -34,14 +35,8 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-# List the available voices
-python akiti_local.py --list-voices
-
-# Default speaker (no reference voice)
+# Synthesize to a WAV file
 python akiti_local.py --text "Meda wo ase paa." --output out.wav
-
-# Use a voice preset
-python akiti_local.py --text "Akwaaba! Wo ho te sɛn?" --voice kofi --output out.wav
 
 # Higher quality (Q8) model
 python akiti_local.py --text "Meda wo ase." --model q8 --output out.wav
@@ -67,16 +62,11 @@ there you can:
 Options: `--model q8`, `--port 8000`, `--host 0.0.0.0`, `--no-browser`.
 Everything runs locally — nothing is uploaded.
 
-> Voice selection is **temporarily disabled** while voice cloning is being
-> improved, so generation uses the default speaker. (The CLI still exposes
-> `--voice` / `--list-voices` for testing.)
-
 ### Options
 
 | Flag | Default | Description |
 |---|---|---|
-| `--text` | — | Twi text to synthesize |
-| `--voice` | `none` | Voice preset name, or `none` for the default speaker |
+| `--text` | — | Text to synthesize |
 | `--model` | `q4` | `q4` (faster) or `q8` (better quality) |
 | `--output` | `output.wav` | Output WAV path |
 | `--temperature` | `0.4` | Higher = more varied |
@@ -88,7 +78,7 @@ Everything runs locally — nothing is uploaded.
 ## Anonymous usage stats
 
 To understand how Akiti TTS performs on real-world hardware, **each generation
-sends a small, anonymous performance report** (from both the CLI and the GUI):
+sends a small, anonymous performance report** (from both the CLI and the Studio):
 
 - your CPU model name, architecture, OS, Python version
 - thread count and model variant (q4/q8)
@@ -116,11 +106,11 @@ running it.
 Stats are sent by default. To opt out:
 
 - **CLI, single run:** pass `--no-stats`.
-- **Everywhere (CLI *and* GUI):** set the environment variable `AKITI_NO_STATS=1`.
+- **Everywhere (CLI *and* Studio):** set the environment variable `AKITI_NO_STATS=1`.
 
 ```bash
 python akiti_local.py --text "Meda wo ase." --no-stats
-# or disable it everywhere, including the GUI:
+# or disable it everywhere, including the Studio:
 export AKITI_NO_STATS=1
 ```
 

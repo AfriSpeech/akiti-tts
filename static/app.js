@@ -45,7 +45,7 @@ function setStatus(cls, text) {
 async function generate() {
   const text = els.text.value.trim();
   els.error.hidden = true;
-  if (!text) { showError("Please enter some Twi text."); return; }
+  if (!text) { showError("Please enter some text."); return; }
   if (!ready) return;
 
   setBusy(true);
