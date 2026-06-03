@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Akiti TTS Studio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div>
+        <h1>Akiti TTS Studio</h1>
+        <p class="tagline">Create voice content — locally on your CPU</p>
+      </div>
+    </div>
+    <div id="status" class="status loading">
+      <span class="dot"></span><span id="status-text">Loading model…</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Editor -->
+    <section class="editor card">
+      <label class="field-label" for="text">Your script</label>
+      <textarea id="text" placeholder="Type or paste your text to turn into speech…"
+                spellcheck="false">Ghanafoɔ amanneɛbɔ a ɛfa nneɛma a ɛrekɔ so wɔ yɛn man yi mu. ɛnnɛ yɛka adwuma a ɛrekɔ so wɔ bɔɔlobɔ akansie mu.</textarea>
+      <div class="editor-foot">
+        <span id="charcount" class="muted">0 characters</span>
+        <button id="generate" class="btn primary" disabled>
+          <span class="btn-label">Generate</span>
+        </button>
+      </div>
+      <p id="error" class="error" hidden></p>
+    </section>
+
+    <!-- Settings -->
+    <aside class="settings card">
+      <h2>Settings</h2>
+
+      <div class="setting">
+        <label for="model">Model</label>
+        <select id="model">
+          <option value="q8" {{ 'selected' if default_model == 'q8' else '' }}>q8 — better quality</option>
+          <option value="q4" {{ 'selected' if default_model == 'q4' else '' }}>q4 — faster</option>
+        </select>
+        <small class="muted">Switching reloads the model (a few seconds).</small>
+      </div>
+
+      <div class="setting">
+        <label>Voice</label>
+        {% if voice_enabled %}
+        <select id="voice"><option value="none">Default speaker</option></select>
+        {% else %}
+        <select disabled><option>Default speaker</option></select>
+        <small class="muted">More voices coming soon.</small>
+        {% endif %}
+      </div>
+
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <div class="setting">
+          <label for="temperature">Temperature <span id="temp-val" class="pill">0.40</span></label>
+          <input type="range" id="temperature" min="0.1" max="1.5" step="0.05" value="0.4">
+          <small class="muted">Higher = more varied delivery.</small>
+        </div>
+        <div class="setting">
+          <label for="rep">Repetition penalty <span id="rep-val" class="pill">1.30</span></label>
+          <input type="range" id="rep" min="1.0" max="2.0" step="0.05" value="1.3">
+          <small class="muted">Higher reduces silences / repeats.</small>
+        </div>
+      </details>
+    </aside>
+
+    <!-- Output / library -->
+    <section class="library card">
+      <div class="library-head">
+        <h2>Generated clips</h2>
+        <button id="clear" class="btn ghost" hidden>Clear all</button>
+      </div>
+      <p id="empty" class="muted empty">Your generated clips will appear here.</p>
+      <ul id="clips" class="clips"></ul>
+    </section>
+  </main>
+
+  <footer class="foot muted">
+    Runs entirely on your machine. Anonymous performance stats help improve the
+    model — opt out with <code>AKITI_NO_STATS=1</code>.
+  </footer>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

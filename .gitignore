@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Generated audio output (keep reference_audio/ samples)
+*.wav
+!reference_audio/*.wav
+
+# Downloaded model weights / caches (large — pulled from HuggingFace at runtime)
+*.gguf
+*.onnx
+*.safetensors
+.cache/
+models/
+hf_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
