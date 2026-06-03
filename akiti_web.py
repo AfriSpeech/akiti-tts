@@ -25,12 +25,13 @@ import multiprocessing
 import platform
 import threading
 import time
+import uuid
 import webbrowser
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from akiti_local import (AkitiTTS, SAMPLE_RATE, SCRIPT_VERSION,
-                         send_stats, _cpu_name)
+from akiti_local import (AkitiTTS, SAMPLE_RATE, SCRIPT_VERSION, MAX_CHUNK_CHARS,
+                         chunk_text, stitch_wavs, send_stats, _cpu_name)
 
 # Voice cloning isn't production-ready yet, so the voice picker is hidden for
 # now and every generation uses the default speaker. The engine still supports
@@ -45,6 +46,12 @@ _engine: AkitiTTS | None = None
 _engine_model: str | None = None
 STATE = {"ready": False, "loading": True, "model": None,
          "error": None, "load_seconds": None, "threads": None}
+
+# --- Generation jobs (chunked synthesis with progress) ---------------------
+# Each job: {stage, total, done, error, wav (bytes), gen, audio, rtf, model}.
+# stage advances: "generating" -> "stitching" -> "done" (or "error").
+_jobs_lock = threading.Lock()
+_jobs: dict[str, dict] = {}
 
 
 def _ensure_engine_locked(model: str) -> AkitiTTS:
@@ -78,12 +85,58 @@ def _warm_up(model: str):
 def index():
     return render_template("index.html",
                            voice_enabled=VOICE_SELECTION_ENABLED,
+                           max_chunk_chars=MAX_CHUNK_CHARS,
                            default_model=app.config["DEFAULT_MODEL"])
 
 
 @app.route("/api/status")
 def status():
     return jsonify(STATE)
+
+
+def _run_job(job_id: str, chunks: list[str], model: str, voice: str,
+             temperature: float, rep_pen: float):
+    """Synthesize `chunks` one at a time, then stitch. Updates _jobs[job_id]."""
+    job = _jobs[job_id]
+    t0 = time.time()
+    try:
+        with _lock:
+            eng = _ensure_engine_locked(model)
+            wavs = []
+            total_codes = 0
+            for i, chunk in enumerate(chunks):
+                wav, n_codes = eng.infer(chunk, voice=voice,
+                                         temperature=temperature, rep_pen=rep_pen)
+                wavs.append(wav)
+                total_codes += n_codes
+                job["done"] = i + 1
+
+            job["stage"] = "stitching"
+            full = stitch_wavs(wavs)
+
+        gen = round(time.time() - t0, 2)
+        audio = round(len(full) / SAMPLE_RATE, 2)
+        rtf = round(gen / audio, 2) if audio else None
+
+        import soundfile as sf
+        buf = io.BytesIO()
+        sf.write(buf, full, SAMPLE_RATE, format="WAV")
+
+        job.update(stage="done", wav=buf.getvalue(),
+                   gen=gen, audio=audio, rtf=rtf, model=model)
+
+        # Anonymous performance telemetry (opt out with AKITI_NO_STATS=1).
+        send_stats({
+            "cpu": _cpu_name(), "arch": platform.machine(), "os": platform.system(),
+            "python": platform.python_version(),
+            "cpu_count": multiprocessing.cpu_count(),
+            "threads": eng.threads, "model": model,
+            "speech_codes": total_codes, "audio_seconds": audio, "gen_seconds": gen,
+            "load_seconds": eng.load_seconds, "rtf": rtf, "chunks": len(chunks),
+            "script_version": SCRIPT_VERSION + "-web",
+        })
+    except Exception as e:  # noqa: BLE001
+        job.update(stage="error", error=str(e))
 
 
 @app.route("/api/synthesize", methods=["POST"])
@@ -106,40 +159,52 @@ def synthesize():
     if VOICE_SELECTION_ENABLED:
         voice = data.get("voice") or "none"
 
-    t0 = time.time()
-    try:
-        with _lock:
-            eng = _ensure_engine_locked(model)
-            wav, n_codes = eng.infer(text, voice=voice,
-                                     temperature=temperature, rep_pen=rep_pen)
-    except Exception as e:  # noqa: BLE001
-        return jsonify(error=str(e)), 500
+    chunks = chunk_text(text)
+    if not chunks:
+        return jsonify(error="Please enter some text."), 400
 
-    gen = round(time.time() - t0, 2)
-    audio = round(len(wav) / SAMPLE_RATE, 2)
-    rtf = round(gen / audio, 2) if audio else None
+    job_id = uuid.uuid4().hex
+    with _jobs_lock:
+        _jobs[job_id] = {"stage": "generating", "total": len(chunks),
+                         "done": 0, "error": None, "wav": None}
+    threading.Thread(target=_run_job, daemon=True,
+                     args=(job_id, chunks, model, voice, temperature, rep_pen)).start()
+    return jsonify(job_id=job_id, total=len(chunks)), 202
 
-    import soundfile as sf
-    buf = io.BytesIO()
-    sf.write(buf, wav, SAMPLE_RATE, format="WAV")
+
+@app.route("/api/progress/<job_id>")
+def progress(job_id):
+    job = _jobs.get(job_id)
+    if not job:
+        return jsonify(error="Unknown job."), 404
+    resp = jsonify(stage=job["stage"], total=job["total"], done=job["done"],
+                   error=job["error"])
+    if job["stage"] == "error":
+        with _jobs_lock:
+            _jobs.pop(job_id, None)  # terminal: client won't fetch a result
+    return resp
+
+
+@app.route("/api/result/<job_id>")
+def result(job_id):
+    job = _jobs.get(job_id)
+    if not job:
+        return jsonify(error="Unknown job."), 404
+    if job["stage"] == "error":
+        return jsonify(error=job["error"]), 500
+    if job["stage"] != "done" or job["wav"] is None:
+        return jsonify(error="Not ready yet."), 409
+
+    with _jobs_lock:
+        _jobs.pop(job_id, None)  # one-shot: free the audio once delivered
+
+    buf = io.BytesIO(job["wav"])
     buf.seek(0)
-
-    # Anonymous performance telemetry (opt out with AKITI_NO_STATS=1).
-    send_stats({
-        "cpu": _cpu_name(), "arch": platform.machine(), "os": platform.system(),
-        "python": platform.python_version(),
-        "cpu_count": multiprocessing.cpu_count(),
-        "threads": eng.threads, "model": model,
-        "speech_codes": n_codes, "audio_seconds": audio, "gen_seconds": gen,
-        "load_seconds": eng.load_seconds, "rtf": rtf,
-        "script_version": SCRIPT_VERSION + "-web",
-    })
-
     resp = send_file(buf, mimetype="audio/wav")
-    resp.headers["X-Gen-Seconds"] = str(gen)
-    resp.headers["X-Audio-Seconds"] = str(audio)
-    resp.headers["X-RTF"] = str(rtf)
-    resp.headers["X-Model"] = model
+    resp.headers["X-Gen-Seconds"] = str(job["gen"])
+    resp.headers["X-Audio-Seconds"] = str(job["audio"])
+    resp.headers["X-RTF"] = str(job["rtf"])
+    resp.headers["X-Model"] = str(job["model"])
     return resp
 
 

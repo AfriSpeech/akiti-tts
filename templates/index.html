@@ -31,6 +31,10 @@
           <span class="btn-label">Generate</span>
         </button>
       </div>
+      <div id="progress" class="progress" hidden>
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        <span id="progress-label" class="muted"></span>
+      </div>
       <p id="error" class="error" hidden></p>
     </section>
 
@@ -88,6 +92,7 @@
     model — opt out with <code>AKITI_NO_STATS=1</code>.
   </footer>
 
+  <script>window.AKITI_MAX_CHARS = {{ max_chunk_chars }};</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
